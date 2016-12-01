@@ -26,8 +26,15 @@ class Main
 	public var replacedMethods:Int = 0;
 	public var replacedProperties:Int = 0;
 	
+	var newClassData:String;
+	
 	public function new()
 	{
+		for (file in FileSystem.readDirectory("out/"))
+		{
+			FileSystem.deleteFile("out/" + file);
+		}
+		
 		FileSystem.createDirectory("out");
 		var i = 0;
 		for (fileName in FileSystem.readDirectory("html/"))
@@ -37,14 +44,17 @@ class Main
 			{
 				totalClasses++;
 				var thing = fileName.split(".").shift();
-				try {
-					scrape(thing, Properties);
-					scrape(thing, Methods);
-					trace(thing, "success");
-					replacedClasses++;
-				}catch (e:String) {
-					trace(thing, "failed");
+				newClassData = File.getContent('html/${thing}.hx');
+				
+				if (newClassData.indexOf("\n@:native(") != -1) {
+					thing = newClassData.split("\n@:native(\"").pop().split("\")").shift();
 				}
+
+				scrape(thing, Properties);
+				scrape(thing, Methods);
+				scrapeSummary(thing, Summary);
+					
+				File.saveContent('out/$thing.hx', newClassData);
 				i ++;
 			}
 			
@@ -57,48 +67,87 @@ class Main
 		}
 	}
 	
+	public function scrapeSummary(thing:String, type:MSDNType)
+	{
+		var msdnData = try
+			Http.requestUrl('https://developer.mozilla.org/en-US/docs/Web/API/$thing?raw&$type')
+		catch (e:Dynamic)
+			null;
+			
+		
+		if (msdnData == null || msdnData.length <= 2)
+		{
+			trace(thing, type, "failed");
+			return false;
+		}
+		trace(thing, type, "success");
+		
+		msdnData = cleanDoc(msdnData);
+		
+		var query = "package js.html;";
+		newClassData = newClassData.replace(query, query + "\n\n/**\n\t" + msdnData + "\n**/");
+		return true;
+	}
+	
 	public function scrape(thing:String, type:MSDNType)
 	{
-		var msdnData = Http.requestUrl('https://developer.mozilla.org/en-US/docs/Web/API/$thing?raw&section='+type);
+		var msdnData = try
+			Http.requestUrl('https://developer.mozilla.org/en-US/docs/Web/API/$thing?raw&section=$type')
+		catch(e:Dynamic)
+			//try
+				//Http.requestUrl('https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/$thing?raw&section=$type')
+			//catch(e:Dynamic)
+				//try
+					//Http.requestUrl('https://developer.mozilla.org/en-US/docs/Web/HTML/Element/$thing?raw&section=$type')
+				//catch(e:Dynamic)
+					null;
+		
+		if (msdnData == null || msdnData.length <= 5)
+		{
+			trace(thing, type, "failed");
+			return false;
+		}
+		
+		replacedClasses++;
+		trace(thing, type, "success");
 		
 		switch(type)
 		{
 			case Methods:
-				var classData = File.getContent('out/${thing}.hx');
-				var newClassData = classData;
-				var regexp = ~/function (.+?)\(/ig;
+				var classData = newClassData;
+				var regexp = ~/function (.+?)(\()/ig;
 				
 				while (regexp.match(classData))
 				{
 					totalMethods++;
 					var property = regexp.matched(1);
-					if (msdnData.indexOf('{{domxref("$thing.$property(') > -1)
+					var propertySearch = '<dt>{{domxref("$thing.$property(';
+					if (msdnData.indexOf(propertySearch) > -1)
 					{
-						var splitted = msdnData.split('{{domxref("$thing.$property(').pop().split("</dd>").shift();
+						var splitted = msdnData.split(propertySearch).pop().split("</dd>").shift();
 						var doc = cleanDoc(splitted.split('<dd>').pop());
 						//trace(property, doc);
 						replacedMethods++;
 						
-						var orig = 'function $property(' + regexp.matched(2);
+						var orig = 'function $property' + regexp.matched(2);
 						newClassData = newClassData.replace(orig, "/**\n\t\t" + doc + "\n\t**/\n\t" + orig);
 					}
 					classData = regexp.matchedRight();
 				}
 				
-				File.saveContent('out/$thing.hx', newClassData);
 				
 			case Properties:
-				var classData = File.getContent('html/${thing}.hx');
-				var newClassData = classData;
+				var classData = newClassData;
 				var regexp = ~/var (.+?)(\(|\s)/g;
 				
 				while (regexp.match(classData))
 				{
 					totalProperties++;
 					var property = regexp.matched(1);
-					if (msdnData.indexOf('{{domxref("$thing.$property")}}') > -1)
+					var propertySearch = '<dt>{{domxref("$thing.$property")}}';
+					if (msdnData.indexOf(propertySearch) > -1)
 					{
-						var splitted = msdnData.split('{{domxref("$thing.$property")}}').pop().split("</dd>").shift();
+						var splitted = msdnData.split(propertySearch).pop().split("</dd>").shift();
 						var doc = cleanDoc(splitted.split('<dd>').pop());
 						
 						//trace(property, doc);
@@ -108,16 +157,16 @@ class Main
 					}
 					classData = regexp.matchedRight();
 				}
-				
-				
-				File.saveContent('out/$thing.hx', newClassData);
+			
+			default:
 		}
+		return true;
 	}
 	
 	function cleanDoc(value:String) 
 	{
 		value = ~/<(?:.|\n)*?>/gm.replace(value, '');
-		value = ~/{{(event|domxref|jsxref)\("(.+?)"(.+?)?}}/gm.replace(value, '`$2`');
+		value = ~/{{(.+?)\("(.+?)"(.+?)?}}/gm.replace(value, '`$2`');
 		return value;
 	}
 }
@@ -126,4 +175,5 @@ class Main
 {
 	var Methods = "Methods";
 	var Properties = "Properties";
+	var Summary = "summary";
 }
