@@ -1,8 +1,6 @@
 package;
 
 import haxe.Http;
-import haxe.xml.Fast;
-import neko.Lib;
 import sys.FileSystem;
 import sys.io.File;
 
