@@ -1,0 +1,5 @@
+-cmd cd bin
+
+--next
+
+-cmd neko htmlexterns.n
