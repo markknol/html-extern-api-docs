@@ -269,12 +269,22 @@ class Main
 
 	private function cleanDoc(value:String)
 	{
+		inline function replaceSpecialWikiMarkup(value:String) 
+		{
+			return value
+				.replace("{{deprecated_inline()}}", "<em>(deprecated)</em>")
+				.replace("{{obsolete_inline}}", "<em>(deprecated)</em>")
+				.replace("{{experimental_inline}}", "<em>(experimental)</em>");
+		}
+		
 		// when there is a table, we keep all html tags, because markdown/html doesnt mix well
 		if (value.indexOf("<table")>-1)
 		{
 			// when there is a table, keep all relevant html
 			value = stripTags(value, ["pre", "code", "table", "tr", "td", "br"]);
 
+			value = replaceSpecialWikiMarkup(value);
+			
 			// remove wiki markup. dont mix html and markdown
 			value = ~/{{(.+?)\("(.+?)"(.+?)?}}/gm.replace(value, '<code>$2</code>');
 		}
@@ -287,6 +297,8 @@ class Main
 			// remove all other html tags
 			value = ~/<(?:.|\n)*?>/gm.replace(value, '');
 
+			value = replaceSpecialWikiMarkup(value);
+			
 			// remove wiki markup, replace with code
 			value = ~/{{(.+?)\(("|')(.+?)("|')(.+?)?}}/gm.replace(value, '`$3`');
 		}
