@@ -22,10 +22,10 @@ using StringTools;
 class Main
 {
 	// base out folder
-	static inline var OUT_FOLDER = "out/";
+	static inline var OUT_FOLDER = "out_latest/";
 	
 	// base in folder
-	static inline var IN_FOLDER = "html/";
+	static inline var IN_FOLDER = "html_latest/";
 	
 	// all scraped data will be stored here. When running for second time it will use data from disk
 	static inline var DATA_FOLDER = "data/";
@@ -165,7 +165,6 @@ class Main
 		switch (type)
 		{
 			case Methods:
-				
 				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?(function (.+?)(\())/ig;
 				// replace extern file content with replaced data
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
@@ -180,12 +179,12 @@ class Main
 							var doc = cleanDoc(mdnData.split(query).pop().split('</dd>').shift().split('<dd>').pop());
 							
 							stats.methods.replaced ++;
-
+							
 							// get api docs of extern file method, if any. just prepend it for now.
 							var origDoc = getAsString(regexp.matched(2));
 							origDoc = (origDoc.length > 0) ? '\n\t\t$origDoc' : '';
 							
-							return "/**\n\t\t" + doc  + origDoc + "\n\t**/\n\t" + regexp.matched(3);
+							return '\n\t/**\n\t\t$doc$origDoc\n\t**/\n\t' + regexp.matched(3);
 						}
 						return null;
 					}
@@ -209,6 +208,7 @@ class Main
 			case Properties:
 				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?(var (.+?)(\(|\s))/g;
 				// replace extern file content with replaced data
+				
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
 				{
 					stats.properties.total ++;
@@ -226,7 +226,7 @@ class Main
 							var origDoc = getAsString(regexp.matched(2));
 							origDoc = (origDoc.length > 0) ? '\n\t\t$origDoc' : '';
 							
-							return '/**\n\t\t$doc$origDoc\n\t**/\n\t' + regexp.matched(3);
+							return '\n\t/**\n\t\t$doc$origDoc\n\t**/\n\t' + regexp.matched(3);
 						}
 						return null;
 					}
@@ -256,10 +256,11 @@ class Main
 					stats.summaries.replaced ++;
 					
 					// put summary after package definition
-					var query = 'package $pack;';
+					var query = new EReg("(package " + pack + ";)([\\r\\n\\t\\s]{1,6})", "ig");
+					
 					var credits = '@see <$MDN_URL$thing>';
 					// replace extern file content with replaced data
-					processedHaxeFile = processedHaxeFile.replace(query, '$query\n\n/**\n\t$mdnData \n\n\t$credits \n**/');
+					processedHaxeFile = query.replace(processedHaxeFile, '$1\n\n/**\n\t$mdnData \n\n\t$credits \n**/\n');
 				}
 		}
 		
