@@ -109,7 +109,7 @@ class Main
 				var foundMethods = processThing(thing, Methods, pack);
 				
 				// process summary
-				var foundSummary = processThing(thing, Summary, pack);
+				var foundSummary = processThing(thing, Summary, pack, foundProps || foundMethods);
 
 				if (foundProps || foundMethods || foundSummary) stats.classes.replaced ++;
 				
@@ -119,7 +119,7 @@ class Main
 		}
 	}
 	
-	private function getMDNData(thing:String, type:MSDNType)
+	private function getMDNData(thing:String, type:MSDNType, needCopyright:Bool = false)
 	{
 		// get mdn url. 
 		var url = switch(type)
@@ -154,7 +154,7 @@ class Main
 		return data;
 	}
 
-	private function processThing(thing:String, type:MSDNType, pack:String)
+	private function processThing(thing:String, type:MSDNType, pack:String, needCopyright:Bool = false)
 	{
 		var mdnData = getMDNData(thing, type);
 		if (mdnData == null) return false;
@@ -162,9 +162,11 @@ class Main
 		
 		inline function getAsString(v:String) return (v != null && v.length > 0) ? v : "";
 		
+		var found = false;
 		switch (type)
 		{
 			case Methods:
+				
 				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?(function (.+?)(\())/ig;
 				// replace extern file content with replaced data
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
@@ -175,6 +177,8 @@ class Main
 					function search(query:String) {
 						if (mdnData.indexOf(query) > -1)
 						{
+							found = true;
+							
 							// get doc of this method. seach for data in next dd-element
 							var doc = cleanDoc(mdnData.split(query).pop().split('</dd>').shift().split('<dd>').pop());
 							
@@ -195,6 +199,7 @@ class Main
 					
 					// sometimes definition looks like this
 					var result = search('<dt>$methodName(');
+					
 					if (result != null) return result;
 					
 					// sometimes definition looks like this
@@ -217,6 +222,7 @@ class Main
 					function search(query:String) {
 						if (mdnData.indexOf(query) > -1)
 						{
+							found = true;
 							// get doc of this property. seach for data in next dd-element
 							var doc = cleanDoc(mdnData.split(query).pop().split('</dd>').shift().split('<dd>').pop());
 							
@@ -251,20 +257,28 @@ class Main
 				mdnData = cleanDoc(mdnData);
 				stats.summaries.total ++; 
 				
-				if (mdnData.length > 2) 
+				if (mdnData.length > 2 || needCopyright) 
 				{
 					stats.summaries.replaced ++;
+					
+					
+					if (mdnData.length > 2) 
+					{
+						found = true;
+						mdnData += "\n\n\t";
+					}
 					
 					// put summary after package definition
 					var query = new EReg("(package " + pack + ";)([\\r\\n\\t\\s]{1,6})", "ig");
 					
+					var copyright = 'Documentation [$thing]($MDN_URL$thing) by [Mozilla Contributors]($MDN_URL$thing$$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).';
 					var credits = '@see <$MDN_URL$thing>';
 					// replace extern file content with replaced data
-					processedHaxeFile = query.replace(processedHaxeFile, '$1\n\n/**\n\t$mdnData \n\n\t$credits \n**/\n');
+					processedHaxeFile = query.replace(processedHaxeFile, '$1\n\n/**\n\t$mdnData$copyright\n\n\t$credits\n**/\n');
 				}
 		}
 		
-		return true;
+		return found;
 	}
 
 	private function cleanDoc(value:String)
@@ -332,7 +346,7 @@ class Main
 	
 	private function logStat(stat:{total:Int, replaced:Int})
 	{
-		return Std.int(stat.replaced / stat.total * 100) + '%  (total=${stat.total})';
+		return Std.int(stat.replaced / stat.total * 100) + '%  (${stat.replaced}/${stat.total})';
 	}
 	
 	private function logStats() 
