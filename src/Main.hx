@@ -98,9 +98,10 @@ class Main
 		{
 			if (!FileSystem.isDirectory(inFolder + fileName))
 			{
-				stats.classes.total++;
 				var thing = fileName.split(".").shift();
-				// trace(fileName, thing);
+				if (thing == '') continue;
+
+				stats.classes.total++;
 				processedHaxeFile = File.getContent('$inFolder${thing}.hx');
 
 				// extract native type name
