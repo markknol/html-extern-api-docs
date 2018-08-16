@@ -102,6 +102,7 @@ class Main
 				if (thing == '') continue;
 
 				stats.classes.total++;
+
 				processedHaxeFile = File.getContent('$inFolder${thing}.hx');
 
 				// extract native type name
@@ -186,7 +187,7 @@ class Main
 			case Methods:
 				
 				// haxiomic: added support for matching methods with metadata
-				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?((@:?[^\s]+\s*)*(static\s+)?function (.+?)(\())/ig;
+				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?((@:?[^\n]+\s*)*(static\s+)?function (.+?)(\())/ig;
 				// replace extern file content with replaced data
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
 				{
