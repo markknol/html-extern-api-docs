@@ -1,3 +1,4 @@
 -main Main
 -cp src
--neko bin/htmlexterns.n
+-neko htmlexterns.n
+-debug

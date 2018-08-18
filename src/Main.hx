@@ -22,15 +22,19 @@ using StringTools;
 class Main
 {
 	// base out folder
-	static inline var OUT_FOLDER = "out_latest/";
+	static inline var OUT_FOLDER = "_output_documented_html/";
 	
 	// base in folder
-	static inline var IN_FOLDER = "html_latest/";
+	static inline var IN_FOLDER = "../haxe/std/js/html/";
 	
 	// all scraped data will be stored here. When running for second time it will use data from disk
-	static inline var DATA_FOLDER = "data/";
+	static inline var DATA_FOLDER = "_mdn-docs-cache/";
 	
 	static inline var MDN_URL = "https://developer.mozilla.org/en-US/docs/Web/API/";
+
+	static var nameAliases = [
+		'ConsoleInstance' => 'Console'
+	];
 	
 	
 	static function main() new Main();
@@ -94,13 +98,21 @@ class Main
 		{
 			if (!FileSystem.isDirectory(inFolder + fileName))
 			{
-				stats.classes.total++;
 				var thing = fileName.split(".").shift();
+				if (thing == '') continue;
+
+				stats.classes.total++;
+
 				processedHaxeFile = File.getContent('$inFolder${thing}.hx');
 
 				// extract native type name
 				var nativeMetaSearch = "\n@:native(\"";
 				if (processedHaxeFile.indexOf(nativeMetaSearch) != -1) thing = processedHaxeFile.split(nativeMetaSearch).pop().split("\")").shift();
+
+				// alias 'thing'
+				if (nameAliases[thing] != null) {
+					thing = nameAliases[thing];
+				}
 				
 				// process properties
 				var foundProps = processThing(thing, Properties, pack);
@@ -125,7 +137,13 @@ class Main
 		var url = switch(type)
 		{
 			case Methods, Properties:
-				'$MDN_URL$thing?raw&section=$type';
+				if  (thing == 'WebGLRenderingContext' || thing == 'WebGL2RenderingContext') {
+					// WebGL pages don't have methods and properties sections
+					// Instead, pull everything and search through for methods
+					'$MDN_URL$thing?raw';	
+				} else {
+					'$MDN_URL$thing?raw&section=$type';
+				}
 				
 			case Summary:
 				'$MDN_URL$thing?raw&$type';
@@ -136,9 +154,10 @@ class Main
 			if (FileSystem.exists('$DATA_FOLDER$thing-$type')) 
 				File.getContent('$DATA_FOLDER$thing-$type')
 			else 
-				try
-					Http.requestUrl(url)
-				catch (e:Dynamic)
+				try{
+					trace('Requesting MDN data for "$thing" at "$url"');
+					Http.requestUrl(url);
+				} catch (e:Dynamic)
 					null;
 			
 		if (data == null || data.length <= 5)
@@ -167,12 +186,13 @@ class Main
 		{
 			case Methods:
 				
-				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?(function (.+?)(\())/ig;
+				// haxiomic: added support for matching methods with metadata
+				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?((@:?[^\n]+\s*)*(static\s+)?function (.+?)(\())/ig;
 				// replace extern file content with replaced data
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
 				{
 					stats.methods.total ++;
-					var methodName = regexp.matched(4);
+					var methodName = regexp.matched(6);
 					
 					function search(query:String) {
 						if (mdnData.indexOf(query) > -1)
@@ -192,32 +212,30 @@ class Main
 						}
 						return null;
 					}
-					
-					// sometimes definition looks like this
-					var result = search('<dt>{{domxref("$thing.$methodName(');
-					if (result != null) return result;
-					
-					// sometimes definition looks like this
-					var result = search('<dt>$methodName(');
-					
-					if (result != null) return result;
-					
-					// sometimes definition looks like this
-					var result = search('<dt><code>$methodName(');
-					if (result != null) return result;
+
+					for (query in [
+						'<dt>{{domxref("$thing.$methodName(',
+						'<dt>{{domxref("${classCase(thing)}.$methodName(',
+						'<dt>$methodName(',
+						'<dt><code>$methodName(',
+					]) {
+						var result = search(query);
+						if (result != null) return result;
+					}
 					
 					return getAsString(regexp.matched(1)) + regexp.matched(3);
 				});
 				
 				
 			case Properties:
-				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?(var (.+?)(\(|\s))/g;
+				// haxiomic: added support for matching methods with metadata
+				var regexp = ~/(\/\*\* (.+?) \*\/\n\t)?((@:?[^\s]+\s*)*(static\s+)?var (.+?)(\(|\s))/g;
 				// replace extern file content with replaced data
 				
 				processedHaxeFile = regexp.map(processedHaxeFile, function(regexp) 
 				{
 					stats.properties.total ++;
-					var property = regexp.matched(4);
+					var property = regexp.matched(6);
 					
 					function search(query:String) {
 						if (mdnData.indexOf(query) > -1)
@@ -236,18 +254,16 @@ class Main
 						}
 						return null;
 					}
-					
-					// sometimes definition looks like this
-					var result = search('<dt>{{domxref("$thing.$property")}}');
-					if (result != null) return result;
-					
-					// sometimes definition looks like this
-					var result = search('<dt>$property<');
-					if (result != null) return result;
-					
-					// sometimes definition looks like this
-					var result = search('<dt><code>$property<');
-					if (result != null) return result;
+
+					for (query in [
+						'<dt>{{domxref("$thing.$property")}}',
+						'<dt>{{domxref("${classCase(thing)}.$property")}}',
+						'<dt>$property<',
+						'<dt><code>$property<',
+					]) {
+						var result = search(query);
+						if (result != null) return result;
+					}
 					
 					return getAsString(regexp.matched(1)) + regexp.matched(3);
 				});
@@ -342,6 +358,10 @@ class Main
 			var ereg = new EReg("<(?!(" + tags.join("|") + ")\\s*\\/?)[^>]+>", "g" );
 			return ereg.replace(value, '' );
 		}
+	}
+
+	private function classCase(value: String) {
+		return value.charAt(0).toUpperCase() + value.substring(1);
 	}
 	
 	private function logStat(stat:{total:Int, replaced:Int})
